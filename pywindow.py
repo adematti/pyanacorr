@@ -8,6 +8,14 @@ def new(tab,dtype=ctypes.c_double,copy=False):
 	if copy: return scipy.asarray(tab,dtype=dtype).flatten()
 	return tab.astype(dtype).flatten()
 
+def tolist(el,n=None,fill=None,value=None):
+	if not isinstance(el,list): el = [el]
+	if n is None: return el
+	miss = n-len(el)
+	if isinstance(fill,int): el += [el[fill]]*miss
+	else: el += [value]*miss
+	return el
+
 class PyWindow(object):
 
 	C_TYPE = ctypes.c_double
@@ -62,7 +70,13 @@ class PyWindow(object):
 		los = [self.set_los(ilos+1,los=los[ilos],n=losn[ilos]) for ilos in range(n)]
 		return los
 
-	def find_angular_selection(self,x,y=None,interpol='lin'):
+	def set_precision(self,calculation='mu',n=0,min=1.,max=-1.,integration='test'):
+
+		assert typewin in ['mu','x','costheta']
+		self.window.set_precision.argtypes = (ctypes.c_char_p,ctypes.c_size_t,self.C_TYPE,self.C_TYPE,ctypes.c_char_p)
+		self.window.set_precision(calculation,n,min,max,integration)
+
+	def find_angular_selection(self,x,y=None):
 
 		x = scipy.asarray(x)
 		if len(self._costheta) == 2:
@@ -71,60 +85,59 @@ class PyWindow(object):
 			self.window.find_angular_selection_2d.restype = self.C_TYPE
 			toret = [[self.window.find_angular_selection_2d(x_,y_) for y_ in y] for x_ in x]
 		else:
-			interpol = 1 if interpol=='poly' else 0
-			self.window.find_angular_selection_1d.argtypes = (self.C_TYPE,ctypes.c_size_t)
+			interpol = 1 if interpol=='lin' else 0
+			self.window.find_angular_selection_1d.argtypes = (self.C_TYPE)
 			self.window.find_angular_selection_1d.restype = self.C_TYPE
-			toret = [self.window.find_angular_selection_1d(x_,interpol) for x_ in x]
+			toret = [self.window.find_angular_selection_1d(x_) for x_ in x]
 
 		return scipy.array(toret)
 
-	def set_2pcf_multi(self,s,costheta,angular,distance,radial,ells=[0,2,4,6,8,10,12],los='midpoint',losn=0,typewin='global',nthreads=8):
+	def set_2pcf_multi(self,s,costheta,angular,distance,radial,ells=[0,2,4,6,8,10,12],los='midpoint',losn=0,typewin='global',interpol_angular='lin',interpol_radial='lin',nthreads=8):
 
 		self.ells = self.set_pole(1,ells=ells)
 		self.los = self.set_los(1,los=los,n=losn)
-		self.set_angular_selection(costheta,angular)
-		self.set_n_radial_selection(distance,radial,n=2)
+		self.set_angular_selection(costheta,angular,interpol=interpol_angular)
+		self.set_n_radial_selection(distance,radial,interpols=interpol_radial,n=2)
 		self.set_window(s)
 		assert typewin in ['global','radial','angular']
 		
 		self.window.run_2pcf_multi.argtypes = (ctypes.c_char_p,ctypes.c_size_t,)
 		self.window.run_2pcf_multi(typewin,nthreads)
 	
-	def set_3pcf_multi(self,s,costheta,angular,distance,radial,ells=[0,2,4,6,8,10,12],los='midpoint',losn=0,typewin='global',nthreads=8):
+	def set_3pcf_multi(self,s,costheta,angular,distance,radial,ells=[0,2,4,6,8,10,12],los='midpoint',losn=0,typewin='global',interpol_angular='lin',interpol_radial='lin',nthreads=8):
 
 		self.ells = self.set_n_poles(ells,n=2)
 		self.los = self.set_n_los(los,losn,n=2)
-		self.set_angular_selection(costheta,angular)
-		self.set_n_radial_selection(distance,radial,n=3)
+		self.set_angular_selection(costheta,angular,interpol=interpol_angular)
+		self.set_n_radial_selection(distance,radial,interpols=interpol_radial,n=3)
 		self.set_window(s)
-		assert typewin in ['global','radial','angular']
+		#assert typewin in ['global','radial','angular']
 		
 		self.window.run_3pcf_multi.argtypes = (ctypes.c_char_p,ctypes.c_size_t,)
 		self.window.run_3pcf_multi(typewin,nthreads)
 
-	def set_4pcf_multi(self,s,costheta,angular,distance,radial,ells=[0,2,4,6,8,10,12],los='midpoint',losn=0,typewin='global-global',nthreads=8):
+	def set_4pcf_multi(self,s,costheta,angular,distance,radial,ells=[0,2,4,6,8,10,12],los='midpoint',losn=0,typewin='global-global',interpol_angular='lin',interpol_radial='lin',nthreads=8):
 
 		self.ells = self.set_n_poles(ells,n=2)
 		self.los = self.set_n_los(los,losn,n=2)
-		self.set_angular_selection(costheta,angular)
-		self.set_n_radial_selection(distance,radial,n=4)
+		self.set_angular_selection(costheta,angular,interpol=interpol_angular)
+		self.set_n_radial_selection(distance,radial,interpols=interpol_radial,n=4)
 		self.set_window(s)
 		assert typewin in ['global-global','radial-radial','radial-global','angular-angular','angular-global','angular-radial']
 		
 		self.window.run_4pcf_multi.argtypes = (ctypes.c_char_p,ctypes.c_size_t,)
 		self.window.run_4pcf_multi(typewin,nthreads)
 		
-	def set_n_radial_selection(self,distances,radials,n=1):
+	def set_n_radial_selection(self,distances,radials,interpols='lin',n=1):
 
-		if not isinstance(distances,list): distances = [distances]
-		if not isinstance(radials,list): radials = [radials]
-		distances += [distances[-1]]*(n-len(distances))
-		radials += [radials[-1]]*(n-len(radials))
+		distances = tolist(distances,n=n,fill=-1)
+		radials = tolist(radials,n=n,fill=-1)
+		interpols = tolist(interpols,n=n,fill=-1)
 
-		for num,(distance,radial) in enumerate(zip(distances,radials)):
-			self.set_radial_selection(num+1,distance,radial)
+		for num,(distance,radial,interpol) in enumerate(zip(distances,radials,interpols)):
+			self.set_radial_selection(num+1,distance,radial,interpol)
 
-	def set_radial_selection(self,num,distance,radial,copy=False):
+	def set_radial_selection(self,num,distance,radial,interpol='lin',copy=False):
 
 		size = len(distance)
 		
@@ -134,10 +147,10 @@ class PyWindow(object):
 		typedistance = ctypeslib.ndpointer(dtype=self.C_TYPE,shape=size)
 		typeradial = ctypeslib.ndpointer(dtype=self.C_TYPE,shape=size)
 		
-		self.window.set_radial_selection.argtypes = (ctypes.c_size_t,typedistance,typeradial,ctypes.c_size_t)
-		self.window.set_radial_selection(num,self._distance[num],self._radial[num],size)
+		self.window.set_radial_selection.argtypes = (ctypes.c_size_t,typedistance,typeradial,ctypes.c_size_t,ctypes.c_char_p)
+		self.window.set_radial_selection(num,self._distance[num],self._radial[num],size,interpol)
 
-	def set_angular_selection(self,costheta,angular,copy=False):
+	def set_angular_selection(self,costheta,angular,interpol='lin',copy=False):
 		
 		if scipy.isscalar(costheta[0]): costheta = [costheta]
 		shapeangular = angular.shape
@@ -151,8 +164,8 @@ class PyWindow(object):
 		typecostheta = ctypeslib.ndpointer(dtype=self.C_TYPE,shape=scipy.sum(shape))
 		typeangular = ctypeslib.ndpointer(dtype=self.C_TYPE,shape=scipy.prod(shape))
 		
-		self.window.set_angular_selection.argtypes = (typecostheta,typeangular,ctypeslib.ndpointer(dtype=ctypes.c_size_t,shape=len(shape)),ctypes.c_size_t)
-		self.window.set_angular_selection(self.__costheta,self._angular,self._shape_angular,len(shapeangular))
+		self.window.set_angular_selection.argtypes = (typecostheta,typeangular,ctypeslib.ndpointer(dtype=ctypes.c_size_t,shape=len(shape)),ctypes.c_size_t,ctypes.c_char_p)
+		self.window.set_angular_selection(self.__costheta,self._angular,self._shape_angular,len(shapeangular),interpol)
 		
 		self._angular.shape = shapeangular
 		

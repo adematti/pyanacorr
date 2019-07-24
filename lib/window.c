@@ -42,19 +42,19 @@ void print_pole(Pole pole)
 {
 	printf("*** Multipoles\n");
 	size_t ill;
-	if (pole.type==MULTI_ALL) {
+	if (pole.type == MULTI_ALL) {
 		printf(" - multi-type: all\n");
 		printf(" - ells:");
 		for (ill=0;ill<pole.n_ells;ill++) printf(" %zu",ill);
 		printf("\n");
 	}
-	if (pole.type==MULTI_EVEN) {
+	if (pole.type == MULTI_EVEN) {
 		printf(" - multi-type: even\n");
 		printf(" - ells:");
 		for (ill=0;ill<pole.n_ells;ill++) printf(" %zu",2*ill);
 		printf("\n");
 	}
-	if (pole.type==MULTI_ODD) {
+	if (pole.type == MULTI_ODD) {
 		printf(" - multi-type: odd\n");
 		printf(" - ells:");
 		for (ill=0;ill<pole.n_ells;ill++) printf(" %zu",2*ill+1);
@@ -69,7 +69,7 @@ void set_pole(size_t num,char *type,size_t n_ells)
 	else if (!strcmp(type,"even")) pole.type=MULTI_EVEN;
 	else if (!strcmp(type,"odd")) pole.type=MULTI_ODD;
 	else {
-		pole.type=MULTI_ALL;
+		pole.type = MULTI_ALL;
 		fprintf(stderr," - invalid multipole type. Choices: all, even or odd.\n");
 		fprintf(stderr," - I choose all.\n");
 	}
@@ -87,9 +87,9 @@ void clear_poles()
 void print_los(LOS l)
 {
 	printf("*** Line-of-sight\n");
-	if (l.type==LOS_MIDPOINT) printf(" - los-type: midpoint\n");
-	else if (l.type==LOS_ENDPOINT) printf(" - los-type: endpoint\n");
-	else if (l.type==LOS_FIRSTPOINT) printf(" - los-type: firstpoint\n");
+	if (l.type == LOS_MIDPOINT) printf(" - los-type: midpoint\n");
+	else if (l.type == LOS_ENDPOINT) printf(" - los-type: endpoint\n");
+	else if (l.type == LOS_FIRSTPOINT) printf(" - los-type: firstpoint\n");
 	printf(" - los-n: %zu\n",l.n);
 }
 
@@ -119,7 +119,7 @@ void print_window()
 	}
 }
 
-void set_window(histo_t* x,histo_t* y,size_t* s,size_t n)
+void set_window(histo_t* x,histo_t* y,size_t* s,size_t n,char* interpol)
 {
 	window.x = x;
 	window.y = y;
@@ -140,7 +140,7 @@ void print_angular_selection()
 	}
 }
 
-void set_angular_selection(histo_t* x,histo_t* y,size_t* s,size_t n)
+void set_angular_selection(histo_t* x,histo_t* y,size_t* s,size_t n,char *interpol)
 {
 	angular.x = x;
 	angular.y = y;
@@ -149,11 +149,13 @@ void set_angular_selection(histo_t* x,histo_t* y,size_t* s,size_t n)
 	angular.size = 1;
 	size_t idim;
 	for (idim=0;idim<angular.n_dim;idim++) angular.size *= angular.shape[idim];
+	if (!strcmp(interpol,"poly")) angular.interpol = POLY;
+	else angular.interpol = LIN;
 }
 
-histo_t find_angular_selection_1d(histo_t x,INTERPOL interpol)
+histo_t find_angular_selection_1d(histo_t x)
 {
-	return find_selection_1d(angular,x,interpol);
+	return find_selection_1d(angular,x);
 }
 
 histo_t find_angular_selection_2d(histo_t x,histo_t y)
@@ -175,12 +177,14 @@ void print_radial_selections()
 	}
 }
 
-void set_radial_selection(size_t num,histo_t* x,histo_t* y,size_t n)
+void set_radial_selection(size_t num,histo_t* x,histo_t* y,size_t n,char *interpol)
 {
 	Selection radial;
 	radial.x = x;
 	radial.y = y;
 	radial.size = n;
+	if (!strcmp(interpol,"poly")) radial.interpol = POLY;
+	else radial.interpol = LIN;
 	radials[num-1] = radial;
 }
 
@@ -210,8 +214,8 @@ void run_3pcf_multi(char* type,size_t num_threads)
 		print_window();
 	}
 	set_num_threads(num_threads);
-	if (!strcmp(type,"global")) cross_3pcf_multi(angular,radials,window,poles,los);
-	if (!strcmp(type,"radial")) cross_3pcf_multi_radial(angular,radials,window,poles,los);
+	if (!strcmp(type,"global-dlos")) cross_3pcf_multi_double_los(angular,radials,window,poles,los);
+	if (!strcmp(type,"radial-dlos")) cross_3pcf_multi_radial_double_los(angular,radials,window,poles,los);
 	if (!strcmp(type,"angular")) cross_3pcf_multi_angular(angular,radials,window,poles,los);
 	if (verbose == INFO) timer(1);
 }

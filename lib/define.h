@@ -39,9 +39,10 @@ typedef double histo_t;
 #endif //_FLOAT32
 
 typedef enum {QUIET, INFO, DEBUG} VERBOSITY;
-typedef enum {LIN, POLY} INTERPOL;
 typedef enum {LOS_MIDPOINT, LOS_ENDPOINT, LOS_FIRSTPOINT} LOS_TYPE;
 typedef enum {MULTI_ALL, MULTI_EVEN, MULTI_ODD} MULTI_TYPE;
+typedef enum {TRAPZ, GAULEG} INTEGRATION;
+typedef enum {LIN, POLY} INTERPOL;
 
 //Selection
 typedef struct {
@@ -50,6 +51,7 @@ typedef struct {
 	size_t *shape;
 	size_t n_dim;
 	size_t size;
+	INTERPOL interpol;
 } Selection;
 
 typedef struct {
@@ -61,6 +63,20 @@ typedef struct {
 	LOS_TYPE type;
 	size_t n;
 } LOS;
+
+typedef struct {
+	size_t n;
+	histo_t min;
+	histo_t max;
+	INTEGRATION integration;
+} Precision;
+
+typedef struct {
+	size_t n;
+	histo_t *x;
+	histo_t *w;
+	INTEGRATION type;
+} Integration;
 
 VERBOSITY verbose;
 

@@ -1,6 +1,7 @@
 #include <stdio.h>
-#include <math.h>
 #include <stdlib.h>
+#include <math.h>
+#include <string.h>
 #include "define.h"
 #include "common.h"
 
@@ -100,7 +101,7 @@ static histo_t interpol_poly(histo_t x,histo_t *tabx,histo_t *taby,size_t nx)
 	return y;
 }
 
-histo_t find_selection_1d(Selection selection,histo_t x,INTERPOL interpol)
+histo_t find_selection_1d(Selection selection,histo_t x)
 {
 	size_t end = selection.size;
 	histo_t xstart = selection.x[0];
@@ -108,7 +109,7 @@ histo_t find_selection_1d(Selection selection,histo_t x,INTERPOL interpol)
 	
 	if ((x<xstart)||(x>xend)) return 0.;
 	size_t ind = get_dichotomy_index(x,selection.x,0,end);
-	if (interpol == POLY) {
+	if (selection.interpol == POLY) {
 		size_t ixmin = MAX(0,((long) ind)-2);
 		size_t ixmax = MIN(end-1,ind+2);
 		return interpol_poly(x,&(selection.x[ixmin]),&(selection.y[ixmin]),ixmax-ixmin+1);
@@ -136,6 +137,117 @@ histo_t find_selection_2d(Selection selection,histo_t x,histo_t y)
 	indy -= endx;
 	histo_t f[4] = {selection.y[indy+shapey*indx],selection.y[indy+shapey*(indx+1)],selection.y[indy+1+shapey*indx],selection.y[indy+1+shapey*(indx+1)]};
 	return interpol_bilin(x,y,fx,fy,f);
+}
+
+static _Bool set_integration(INTEGRATION *current,char *new)
+{
+	if (!strcmp(new,"trapz")) {
+		*current = TRAPZ;
+		return 1;
+	}
+	else if (!strcmp(new,"gauleg")) {
+		*current = GAULEG;
+		return 1;
+	}
+	return 0;
+}
+
+_Bool set_precision_integration(Precision *precision,size_t n,histo_t min,histo_t max,char *integration,const Precision *precision_default)
+{
+	_Bool change = 0;
+	if (n>0) {
+		precision->n = n;
+		change = 1;
+	}
+	if (max>=min) {
+		precision->min = min;
+		precision->max = max;
+		change = 1;
+	}
+	if (set_integration(&(precision->integration),integration)) {
+		change = 1;
+	}
+	if (!change) *precision = *precision_default;
+	return change;
+}
+
+void nodes_weights_gauss_legendre(histo_t xmin,histo_t xmax,histo_t *x,histo_t *w,size_t n) {
+
+	/*
+	xmin: minimum x
+	xmax: maximum x
+	x: array of nodes
+	w: array of weights
+	n: size of x,w
+	*/
+
+	size_t ii,jj,mid = (n+1)/2;
+	histo_t xmid = (xmax+xmin)/2.;
+	histo_t xl = (xmax-xmin)/2.;
+	histo_t p1=0.,p2=0.,p3=0.,pp=0.,z=0.,z1=0.;
+	
+	for (ii=0;ii<mid;ii++) {
+		z = cos(M_PI*(ii+.75)/(n+.5));
+		z1 = z + EPS + 1.;
+		while (my_abs(z-z1)>EPS) {
+			p1 = 1.;
+			p2 = 0.;
+			for (jj=0;jj<n;jj++) {
+				p3 = p2;
+				p2 = p1;
+				p1 = ((2.*jj+1.)*z*p2-jj*p3)/(jj+1.);
+			}
+			pp=n*(z*p1-p2)/(z*z-1.);
+			z1=z;
+			z=z1-p1/pp;
+		}
+		x[ii] = xmid-xl*z;
+		x[n-ii-1] = xmid+xl*z;
+		w[ii] = 2.*xl/((1.-z*z)*pp*pp);
+ 		w[n-ii-1] = w[ii];
+	}
+}
+
+void nodes_weights_trapz(histo_t xmin,histo_t xmax,histo_t *x,histo_t *w,size_t n) {
+
+	/*
+	xmin: minimum x
+	xmax: maximum x
+	x: array of nodes
+	w: array of weights
+	n: size of x,w
+	*/
+
+	histo_t step = (xmax-xmin)/(n-1);
+	size_t ii;
+	for (ii=0;ii<n;ii++) x[ii] = ii*step + xmin;
+	for (ii=1;ii<n-1;ii++) w[ii] = (x[ii+1]-x[ii-1])/2.;
+	w[0] = (x[1]-x[0])/2.;
+	w[n-1] = (x[n-1]-x[n-2])/2.;
+}
+
+void init_integration(Integration *integration,Precision *precision)
+{
+	histo_t min=precision->min,max=precision->max;
+	size_t size = sizeof(histo_t);
+	size_t n = precision->n;
+	integration->n = n;
+	integration->x = (histo_t *) calloc(n,size);
+	integration->w = (histo_t *) calloc(n,size);
+	integration->type = precision->integration;
+	
+	if (integration->type == TRAPZ) {
+		nodes_weights_trapz(min,max,integration->x,integration->w,integration->n);
+	}
+	if (integration->type == GAULEG) {
+		nodes_weights_gauss_legendre(min,max,integration->x,integration->w,integration->n);
+	}
+}
+
+void free_integration(Integration *integration)
+{
+	free(integration->x);
+	free(integration->w);
 }
 
 static void legendre_all(histo_t mu,histo_t mu2,histo_t leg[])

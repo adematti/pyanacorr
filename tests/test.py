@@ -33,7 +33,7 @@ def test_3pcf_multi(typewin='global',los='midpoint',losn=0):
 		angular = 2.*scipy.ones(len(costheta))
 		radial = scipy.ones(len(distance))
 	else:
-		s = [scipy.linspace(0.1,100.,100)]*2
+		s = [scipy.linspace(0.1,100.,10)]*2
 		costheta = [scipy.linspace(0.8,1.,1000)]*2
 		distance = scipy.linspace(1000.,2000.,1000)
 		angular = 2.*scipy.ones(map(len,costheta))
@@ -96,7 +96,7 @@ def test_verbosity():
 #test_2pcf_multi(typewin='global',los='endpoint')
 #test_2pcf_multi(typewin='radial')
 #test_2pcf_multi(typewin='angular')
-#test_3pcf_multi(typewin='global')
+test_3pcf_multi(typewin='global-dlos')
 #test_3pcf_multi(typewin='angular')
 #test_4pcf_multi(typewin='global-global')
 #test_4pcf_multi(typewin='radial-radial')
@@ -105,6 +105,6 @@ def test_verbosity():
 #test_4pcf_multi(typewin='angular-global')
 #test_4pcf_multi(typewin='angular-radial')
 #test_interpol_bilin()
-plot_angular()
+#plot_angular()
 #test_verbosity()
 
