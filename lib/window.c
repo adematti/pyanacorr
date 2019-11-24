@@ -216,7 +216,7 @@ void run_3pcf_multi(char* type,size_t num_threads)
 	set_num_threads(num_threads);
 	if (!strcmp(type,"global-dlos")) cross_3pcf_multi_double_los(angular,radials,window,poles,los);
 	if (!strcmp(type,"radial-dlos")) cross_3pcf_multi_radial_double_los(angular,radials,window,poles,los);
-	if (!strcmp(type,"angular")) cross_3pcf_multi_angular(angular,radials,window,poles,los);
+	if (!strcmp(type,"angular-dlos")) cross_3pcf_multi_angular_double_los(angular,radials,window,poles,los);
 	if (verbose == INFO) timer(1);
 }
 

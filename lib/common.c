@@ -120,8 +120,8 @@ histo_t find_selection_1d(Selection selection,histo_t x)
 histo_t find_selection_2d(Selection selection,histo_t x,histo_t y)
 {
 	size_t endx = selection.shape[0];
-	size_t shapey = selection.shape[1];
-	size_t endy = shapey+endx;
+	size_t sizey = selection.shape[1];
+	size_t endy = sizey+endx;
 	histo_t xstart = selection.x[0];
 	histo_t xend = selection.x[endx-1];
 	histo_t ystart = selection.x[endx];
@@ -135,8 +135,49 @@ histo_t find_selection_2d(Selection selection,histo_t x,histo_t y)
 	histo_t fx[2] = {selection.x[indx],selection.x[indx+1]};
 	histo_t fy[2] = {selection.x[indy],selection.x[indy+1]};
 	indy -= endx;
-	histo_t f[4] = {selection.y[indy+shapey*indx],selection.y[indy+shapey*(indx+1)],selection.y[indy+1+shapey*indx],selection.y[indy+1+shapey*(indx+1)]};
+	histo_t f[4] = {selection.y[indy+sizey*indx],selection.y[indy+sizey*(indx+1)],selection.y[indy+1+sizey*indx],selection.y[indy+1+sizey*(indx+1)]};
 	return interpol_bilin(x,y,fx,fy,f);
+}
+
+void find_selection_range_1d(Selection selection,histo_t *min,histo_t *max,char *type)
+{
+	histo_t min_=1.,max_=-1.;
+	size_t sizex = selection.shape[0];
+	size_t ix;
+	for (ix=0;ix<sizex;ix++) {
+		if (selection.y[ix] != 0.) {
+			histo_t x = selection.x[ix];
+			if (x < min_) min_ = x;
+			if (x > max_) max_ = x;
+		}
+	}
+	if (min_ > *min) *min = min_;
+	if (max_ < *max) *max = max_;
+	if (verbose == INFO) printf(" - using %s bounds %.4f - %.4f\n",type,*min,*max);
+}
+
+void find_selection_range_2d(Selection selection,histo_t *min,histo_t *max,char *type)
+{
+	histo_t min_=1.,max_=-1.;
+	size_t sizex = selection.shape[0];
+	size_t sizey = selection.shape[1];
+	size_t ix;
+	for (ix=0;ix<sizex;ix++) {
+		size_t iy;
+		for (iy=0;iy<sizey;iy++) {
+			if (selection.y[iy+sizey*ix] != 0.) {
+				histo_t x = selection.x[ix];
+				if (x < min_) min_ = x;
+				if (x > max_) max_ = x;
+				histo_t y = selection.x[sizex+iy];
+				if (y < min_) min_ = y;
+				if (y > max_) max_ = y;
+			}
+		}
+	}
+	if (min_ > *min) *min = min_;
+	if (max_ < *max) *max = max_;
+	if (verbose == INFO) printf(" - using %s bounds %.4f - %.4f\n",type,*min,*max);
 }
 
 static _Bool set_integration(INTEGRATION *current,char *new)

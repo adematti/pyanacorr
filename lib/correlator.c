@@ -145,6 +145,74 @@ void cross_2pcf_multi(Selection angular,Selection* radials,Selection window,Pole
 	histo_t *thready;
 	size_t iy;
 	size_t nw_tot = window.size*pole.n_ells;
+	
+	Integration integration_costheta;
+	find_selection_range_1d(angular,&(precision_costheta.min),&(precision_costheta.max),"costheta");
+	init_integration(&integration_costheta,&precision_costheta);
+
+	for (iy=0;iy<nw_tot;iy++) window.y[iy] = 0.;
+
+#pragma omp parallel default(none) shared(angular,radials,window,nw_tot,pole,los,integration_costheta) private(thready)
+	{
+		size_t icos,iy;
+		const histo_t sign[2] = {-1.,1.};
+		MULTI_TYPE multi_type = pole.type;
+		size_t n_ells = pole.n_ells;
+		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
+		size_t n_s = window.size;
+		//histo_t maxj=-1.,minj=1/EPS;
+
+#pragma omp for nowait schedule(dynamic)
+		for (icos=0;icos<integration_costheta.n;icos++) {
+			histo_t costheta = integration_costheta.x[icos];
+			histo_t pang = integration_costheta.w[icos]*find_selection_1d(angular,costheta);
+			if (pang == 0.) continue;
+			size_t ix;
+			for (ix=0;ix<radials[0].size;ix++) {
+				histo_t x = radials[0].x[ix];
+				histo_t px = radials[0].y[ix];
+				int is;
+				for (is=n_s-1;is>=0;is--) {
+					histo_t s = window.x[is];
+					histo_t delta = x*x*(costheta*costheta-1.) + s*s;
+					if (delta < 0.) break;
+					delta = my_sqrt(delta);
+					histo_t dist_los,leg[MAX_ELLS];
+					size_t isign;
+					for (isign=0;isign<2;isign++) {
+						histo_t xs = x*costheta + sign[isign]*delta;
+						histo_t jacob = jacobian_costheta(x,xs,s);
+						//maxj = MAX(jacob,maxj);
+						//minj = MIN(jacob,minj);
+						//if (jacob > 1e4) continue;
+						histo_t weight = jacob*pang*px*find_selection_1d(radials[1],xs);
+						if (weight == 0.) continue;
+						legendre(get_distance_mu(x,xs,s,los.type,&dist_los),leg,multi_type);
+						weight /= get_distance_losn(dist_los,los.n);
+						size_t ill;
+						for (ill=0;ill<n_ells;ill++) thready[ill+n_ells*is] += weight*leg[ill];
+					}
+				}
+			}
+		} // end omp for
+	
+#pragma omp critical
+		{
+			//printf("jacob %.4f %.4f",minj,maxj);
+			for (iy=0;iy<nw_tot;iy++) window.y[iy] += thready[iy];
+			free(thready);
+		}
+	} //end omp parallel
+	free_integration(&integration_costheta);
+}
+*/
+
+/*
+void cross_2pcf_multi(Selection angular,Selection* radials,Selection window,Pole pole,LOS los)
+{
+	histo_t *thready;
+	size_t iy;
+	size_t nw_tot = window.size*pole.n_ells;
 
 	for (iy=0;iy<nw_tot;iy++) window.y[iy] = 0.;
 
@@ -165,7 +233,7 @@ void cross_2pcf_multi(Selection angular,Selection* radials,Selection window,Pole
 			size_t ix;
 			for (ix=0;ix<radials[0].size;ix++) {
 				histo_t x = radials[0].x[ix];
-				histo_t px = x*x*radials[0].y[ix];
+				histo_t px = radials[0].y[ix];
 				int is;
 				for (is=n_s-1;is>=0;is--) {
 					histo_t s = window.x[is];
@@ -176,8 +244,7 @@ void cross_2pcf_multi(Selection angular,Selection* radials,Selection window,Pole
 					size_t isign;
 					for (isign=0;isign<2;isign++) {
 						histo_t xs = x*costheta + sign[isign]*delta;
-						histo_t weight = pang*px*find_selection_1d(radials[1],xs);
-						weight *= my_abs(2.*xs*xs*xs/s/(xs*xs-x*x+s*s));
+						histo_t weight = jacobian_costheta(x,xs,s)*pang*px*find_selection_1d(radials[1],xs);
 						if (weight == 0.) continue;
 						legendre(get_distance_mu(x,xs,s,los.type,&dist_los),leg,multi_type);
 						weight /= get_distance_losn(dist_los,los.n);
@@ -197,6 +264,216 @@ void cross_2pcf_multi(Selection angular,Selection* radials,Selection window,Pole
 }
 */
 
+
+void cross_3pcf_multi_double_los(Selection angular,Selection* radials,Selection window,Pole* poles,LOS* los)
+{
+	histo_t *thready;
+	size_t iy;
+	const size_t n_sec = 2;
+	size_t nw_tot = window.shape[0]*poles[0].n_ells*window.shape[1]*poles[1].n_ells;
+	
+	Integration integration_costheta;
+	find_selection_range_2d(angular,&(precision_costheta.min),&(precision_costheta.max),"costheta");
+	init_integration(&integration_costheta,&precision_costheta);
+	size_t nw_sec[2] = {integration_costheta.n*window.shape[0]*poles[0].n_ells,integration_costheta.n*window.shape[1]*poles[1].n_ells};
+
+	histo_t* ysec[n_sec];
+
+	for (iy=0;iy<nw_tot;iy++) window.y[iy] = 0.;
+
+#pragma omp parallel default(none) shared(angular,radials,window,nw_tot,nw_sec,poles,los,integration_costheta) private(thready,ysec)
+	{
+		size_t ix,iy,isec;
+		const histo_t sign[2] = {-1.,1.};
+		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
+		for (isec=0;isec<n_sec;isec++) ysec[isec] = (histo_t*) malloc(nw_sec[isec]*sizeof(histo_t));
+
+#pragma omp for nowait schedule(dynamic)
+		for (ix=0;ix<radials[0].size;ix++) {
+			histo_t x = radials[0].x[ix];
+			for (isec=0;isec<n_sec;isec++) {
+				histo_t *y2 = ysec[isec];
+				for (iy=0;iy<nw_sec[isec];iy++) y2[iy] = 0.;
+				Selection radialsec = radials[isec+1];
+				MULTI_TYPE multi_type2 = poles[isec].type;
+				size_t n_ells2 = poles[isec].n_ells;
+				LOS los2 = los[isec];
+				size_t n_s2 = window.shape[isec];
+				size_t start_win = (isec==1) ? window.shape[0] : 0;
+				size_t icos;
+				for (icos=0;icos<integration_costheta.n;icos++) {
+					histo_t costheta = integration_costheta.x[icos];
+					histo_t w = integration_costheta.w[icos];
+					int is;
+					for (is=n_s2-1;is>=0;is--) {
+						histo_t s = window.x[is+start_win];
+						histo_t delta = x*x*(costheta*costheta-1.) + s*s;
+						if (delta < 0.) break;
+						delta = my_sqrt(delta);
+						histo_t dist_los,leg[MAX_ELLS];
+						size_t isign;
+						for (isign=0;isign<2;isign++) {
+							histo_t xs = x*costheta + sign[isign]*delta;
+							histo_t weight = find_selection_1d(radialsec,xs);
+							if (weight == 0.) continue;
+							legendre(get_distance_mu(x,xs,s,los2.type,&dist_los),leg,multi_type2);
+							weight *= w*jacobian_costheta(x,xs,s)/get_distance_losn(dist_los,los2.n);
+							size_t ill;
+							for (ill=0;ill<n_ells2;ill++) y2[ill+n_ells2*(is+n_s2*icos)] += weight*leg[ill];
+						}
+					}
+				}
+			}
+			histo_t px = radials[0].y[ix];
+			histo_t *y2=ysec[0],*y3=ysec[1];
+			size_t n_ells2=poles[0].n_ells,n_ells3=poles[1].n_ells;
+			size_t n_s2=window.shape[0],n_s3=window.shape[1];
+			size_t n_cos=integration_costheta.n;
+			size_t icos2;
+			for (icos2=0;icos2<n_cos;icos2++) {
+				size_t icos3;
+				for (icos3=0;icos3<n_cos;icos3++) {
+					histo_t weight1 = px*find_selection_2d(angular,integration_costheta.x[icos2],integration_costheta.x[icos3]);
+					if (weight1 == 0.) continue;
+					size_t is2;
+					for (is2=0;is2<n_s2;is2++) {
+						size_t ind2 = n_ells2*(is2+n_s2*icos2);
+						if (y2[ind2] != 0.) {
+							size_t is3;
+							for (is3=0;is3<n_s3;is3++) {
+								size_t ind3 = n_ells3*(is3+n_s3*icos3);
+								if (y3[ind3] != 0.) {
+									size_t ill2,ill3;
+									for (ill2=0;ill2<n_ells2;ill2++) {
+										for (ill3=0;ill3<n_ells3;ill3++) {
+											thready[ill3+n_ells3*(ill2+n_ells2*(is3+n_s3*is2))] += weight1*y2[ill2+ind2]*y3[ill3+ind3];
+										}
+									}
+								}
+							}
+						}	
+					}
+				}
+			}
+		} // end omp for
+	
+#pragma omp critical
+		{
+			for (iy=0;iy<nw_tot;iy++) window.y[iy] += thready[iy];
+			for (isec=0;isec<n_sec;isec++) free(ysec[isec]);
+			free(thready);
+		}
+	} //end omp parallel
+	free_integration(&integration_costheta);
+}
+
+
+/*
+void cross_3pcf_multi_double_los(Selection angular,Selection* radials,Selection window,Pole* poles,LOS* los)
+{
+	histo_t *thready;
+	size_t iy;
+	const size_t n_sec = 2;
+	size_t nw_sec[2] = {angular.shape[0]*window.shape[0]*poles[0].n_ells,angular.shape[1]*window.shape[1]*poles[1].n_ells};
+	size_t nw_tot = window.shape[0]*poles[0].n_ells*window.shape[1]*poles[1].n_ells;
+	
+	Integration integration_costheta;
+	precision_costheta.min = MIN(angular.x[0],angular.x[angular.shape[0]-1]);
+	precision_costheta.max = MAX(angular.x[angular.shape[0]],angular.x[angular.shape[0]+angular.shape[-1]-1]);
+	init_integration(&integration_costheta,&precision_costheta);
+
+	histo_t* ysec[n_sec];
+
+	for (iy=0;iy<nw_tot;iy++) window.y[iy] = 0.;
+
+#pragma omp parallel default(none) shared(angular,radials,window,nw_tot,nw_sec,poles,los) private(thready,ysec)
+	{
+		size_t ix,iy,isec;
+		const histo_t sign[2] = {-1.,1.};
+		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
+		for (isec=0;isec<n_sec;isec++) ysec[isec] = (histo_t*) malloc(nw_sec[isec]*sizeof(histo_t));
+
+#pragma omp for nowait schedule(dynamic)
+		for (ix=0;ix<radials[0].size;ix++) {
+			histo_t x = radials[0].x[ix];
+			for (isec=0;isec<n_sec;isec++) {
+				histo_t *y2 = ysec[isec];
+				for (iy=0;iy<nw_sec[isec];iy++) y2[iy] = 0.;
+				Selection radialsec = radials[isec+1];
+				MULTI_TYPE multi_type2 = poles[isec].type;
+				size_t n_ells2 = poles[isec].n_ells;
+				LOS los2 = los[isec];
+				size_t n_s2 = window.shape[isec];
+				size_t start_win = (isec==1) ? window.shape[0] : 0;
+				size_t start_ang = (isec==1) ? angular.shape[0] : 0;
+				size_t icos;
+				for (icos=0;icos<angular.shape[isec];icos++) {
+					histo_t costheta = angular.x[icos+start_ang];
+					int is;
+					for (is=n_s2-1;is>=0;is--) {
+						histo_t s = window.x[is+start_win];
+						histo_t delta = x*x*(costheta*costheta-1.) + s*s;
+						if (delta < 0.) break;
+						delta = my_sqrt(delta);
+						histo_t dist_los,leg[MAX_ELLS];
+						size_t isign;
+						for (isign=0;isign<2;isign++) {
+							histo_t xs = x*costheta + sign[isign]*delta;
+							histo_t weight = find_selection_1d(radialsec,xs);
+							if (weight == 0.) continue;
+							legendre(get_distance_mu(x,xs,s,los2.type,&dist_los),leg,multi_type2);
+							weight *= jacobian_costheta(x,xs,s)/get_distance_losn(dist_los,los2.n);
+							size_t ill;
+							for (ill=0;ill<n_ells2;ill++) y2[ill+n_ells2*(is+n_s2*icos)] += weight*leg[ill];
+						}
+					}
+				}
+			}
+			histo_t px = radials[0].y[ix];
+			histo_t *y2=ysec[0],*y3=ysec[1];
+			size_t n_ells2=poles[0].n_ells,n_ells3=poles[1].n_ells;
+			size_t n_s2=window.shape[0],n_s3=window.shape[1];
+			size_t n_cos2=angular.shape[0],n_cos3=angular.shape[1];
+			size_t icos2;
+			for (icos2=0;icos2<n_cos2;icos2++) {
+				size_t icos3;
+				for (icos3=0;icos3<n_cos3;icos3++) {
+					histo_t weight1 = px*angular.y[icos3+n_cos2*icos2];
+					if (weight1 == 0.) continue;
+					size_t is2;
+					for (is2=0;is2<n_s2;is2++) {
+						size_t ind2 = n_ells2*(is2+n_s2*icos2);
+						if (y2[ind2] != 0.) {
+							size_t is3;
+							for (is3=0;is3<n_s3;is3++) {
+								size_t ind3 = n_ells3*(is3+n_s3*icos3);
+								if (y3[ind3] != 0.) {
+									size_t ill2,ill3;
+									for (ill2=0;ill2<n_ells2;ill2++) {
+										for (ill3=0;ill3<n_ells3;ill3++) {
+											thready[ill3+n_ells3*(ill2+n_ells2*(is3+n_s3*is2))] += weight1*y2[ill2+ind2]*y3[ill3+ind3];
+										}
+									}
+								}
+							}
+						}	
+					}
+				}
+			}
+		} // end omp for
+	
+#pragma omp critical
+		{
+			for (iy=0;iy<nw_tot;iy++) window.y[iy] += thready[iy];
+			for (isec=0;isec<n_sec;isec++) free(ysec[isec]);
+			free(thready);
+		}
+	} //end omp parallel
+	free_integration(&integration_costheta);
+}
+*/
+
+/*
 void cross_3pcf_multi_double_los(Selection angular,Selection* radials,Selection window,Pole* poles,LOS* los)
 {
 	histo_t *thready;
@@ -269,6 +546,7 @@ void cross_3pcf_multi_double_los(Selection angular,Selection* radials,Selection 
 	} //end omp parallel
 	free_integration(&integration_mu);
 }
+*/
 
 void cross_4pcf_multi(Selection angular,Selection* radials,Selection window,Pole* poles,LOS* los)
 {
@@ -390,15 +668,15 @@ void cross_3pcf_multi_radial_double_los(Selection angular,Selection* radials,Sel
 					histo_t s = window.x[is];
 					histo_t xs = my_sqrt(x*x + 2.*x*s*mus + s*s);
 					histo_t costhetas = (xs*xs + x*x - s*s)/(2.*x*xs);
-					histo_t pxxs = px*find_selection_1d(radials[1],xs);
-					if (pxxs == 0.) continue;
+					histo_t weight = w*px*find_selection_1d(radials[1],xs);
+					if (weight == 0.) continue;
 					histo_t dist_los,dist_los2,legs[MAX_ELLS],legs2[MAX_ELLS];
 					legendre(get_distance_mu(x,xs,s,los[0].type,&dist_los),legs,poles[0].type);
 					legendre(get_distance_mu(xs,x,s,los[0].type,&dist_los2),legs2,poles[0].type);
 					dist_los = get_distance_losn(dist_los,los[0].n);
 					dist_los2 = get_distance_losn(dist_los2,los[0].n);
 					size_t ill2;
-					for (ill2=0;ill2<n_ells2;ill2++) legs[ill2] = w*pxxs*(legs[ill2]/dist_los + legs2[ill2]/dist_los2);
+					for (ill2=0;ill2<n_ells2;ill2++) legs[ill2] = weight*(legs[ill2]/dist_los + legs2[ill2]/dist_los2);
 					size_t id;
 					for (id=0;id<n_s3;id++) {
 						histo_t d = window.x[id+n_s2];
@@ -461,13 +739,13 @@ void cross_4pcf_multi_radial_radial(Selection angular,Selection* radials,Selecti
 					histo_t s = window.x[is];
 					histo_t xs = my_sqrt(x*x + 2.*x*s*mus + s*s);
 					histo_t costhetas = (xs*xs + x*x - s*s)/(2.*x*xs);
-					histo_t pxxs = find_selection_1d(angular,costhetas)*px*find_selection_1d(radials[1],xs);
-					if (pxxs == 0.) continue;
+					histo_t weight = w*find_selection_1d(angular,costhetas)*px*find_selection_1d(radials[1],xs);
+					if (weight == 0.) continue;
 					histo_t dist_los,legs[MAX_ELLS];
 					legendre(get_distance_mu(x,xs,s,los[0].type,&dist_los),legs,poles[0].type);
 					dist_los = get_distance_losn(dist_los,los[0].n);
 					size_t ill2;
-					for (ill2=0;ill2<n_ells2;ill2++) legs[ill2] = w*pxxs*legs[ill2]/dist_los;
+					for (ill2=0;ill2<n_ells2;ill2++) legs[ill2] = weight*legs[ill2]/dist_los;
 					size_t id;
 					for (id=0;id<n_s3;id++) {
 						histo_t d = window.x[id+n_s2];
@@ -643,7 +921,187 @@ void cross_2pcf_multi_angular(Selection* radials,Selection window,Pole pole,LOS 
 		}
 	} //end omp parallel
 }
+/*
+void cross_3pcf_multi_angular_double_los(Selection angular,Selection* radials,Selection window,Pole* poles,LOS* los)
+{
+	histo_t *thready;
+	size_t iy;
+	const size_t n_sec = 2;
+	size_t nw_sec[2] = {window.shape[0]*poles[0].n_ells,window.shape[1]*poles[1].n_ells};
+	size_t nw_tot = nw_sec[0]*nw_sec[1];
+	histo_t* ysec[n_sec];
+	
+	Integration integration_costheta;
+	find_selection_range_1d(angular,&(precision_costheta.min),&(precision_costheta.max),"costheta");
+	init_integration(&integration_costheta,&precision_costheta);
 
+	for (iy=0;iy<nw_tot;iy++) window.y[iy] = 0.;
+
+#pragma omp parallel default(none) shared(angular,radials,window,nw_tot,nw_sec,poles,los,integration_costheta) private(thready,ysec)
+	{
+		size_t ix,iy,isec;
+		const histo_t sign[2] = {-1.,1.};
+		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
+		for (isec=0;isec<n_sec;isec++) ysec[isec] = (histo_t*) malloc(nw_sec[isec]*sizeof(histo_t));
+
+#pragma omp for nowait schedule(dynamic)
+		for (ix=0;ix<radials[0].size;ix++) {
+			histo_t x = radials[0].x[ix];
+			histo_t px = radials[0].y[ix];
+			size_t icos;
+			for (icos=0;icos<integration_costheta.n;icos++) {
+				histo_t costheta = integration_costheta.x[icos];
+				histo_t pang = integration_costheta.w[icos]*find_selection_1d(angular,costheta);
+				if (pang == 0.) continue;
+				for (isec=0;isec<n_sec;isec++) {
+					histo_t *y2 = ysec[isec];
+					for (iy=0;iy<nw_sec[isec];iy++) y2[iy] = 0.;
+					Selection radialsec = radials[isec+1];
+					MULTI_TYPE multi_type2 = poles[isec].type;
+					size_t n_ells2 = poles[isec].n_ells;
+					LOS los2 = los[isec];
+					size_t n_s2 = window.shape[isec];
+					histo_t dist_los,leg[MAX_ELLS];
+					size_t start_win = (isec==1) ? window.shape[0] : 0;
+					int is;
+					for (is=n_s2-1;is>=0;is--) {
+						histo_t s = window.x[is+start_win];
+						histo_t delta = x*x*(costheta*costheta-1.) + s*s;
+						if (delta < 0.) break;
+						delta = my_sqrt(delta);
+						size_t isign;
+						for (isign=0;isign<2;isign++) {
+							histo_t xs = x*costheta + sign[isign]*delta;
+							histo_t weight = find_selection_1d(radialsec,xs);
+							if (weight == 0.) continue;
+							legendre(get_distance_mu(x,xs,s,los2.type,&dist_los),leg,multi_type2);
+							//weight *= jacobian_costheta(x,xs,s)/get_distance_losn(dist_los,los2.n);
+							//weight *= 1./get_distance_losn(dist_los,los2.n);
+							weight *= my_abs(xs*xs/s/delta)/get_distance_losn(dist_los,los2.n);
+							size_t ill;
+							for (ill=0;ill<n_ells2;ill++) y2[ill+is*n_ells2] += weight*leg[ill];
+						}
+					}
+				}
+				histo_t weight = px*pang;
+				histo_t *y2=ysec[0],*y3=ysec[1];
+				size_t n_ells2=poles[0].n_ells,n_ells3=poles[1].n_ells;
+				size_t n_s2=window.shape[0],n_s3=window.shape[1];
+				size_t is2;
+				for (is2=0;is2<n_s2;is2++) {
+					if (y2[is2*n_ells2] != 0.) {
+						size_t is3;
+						for (is3=0;is3<n_s3;is3++) {
+							if (y3[is3*n_ells3] != 0.) {
+								size_t ill2,ill3;
+								for (ill2=0;ill2<n_ells2;ill2++) {
+									for (ill3=0;ill3<n_ells3;ill3++) {
+										thready[ill3+n_ells3*(ill2+n_ells2*(is3+n_s3*is2))] += weight*y2[ill2+is2*n_ells2]*y3[ill3+is3*n_ells3];
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		} // end omp for
+	
+#pragma omp critical
+		{
+			for (iy=0;iy<nw_tot;iy++) window.y[iy] += thready[iy];
+			for (isec=0;isec<n_sec;isec++) free(ysec[isec]);
+			free(thready);
+		}
+	} //end omp parallel
+}
+*/
+
+void cross_3pcf_multi_angular_double_los(Selection angular,Selection* radials,Selection window,Pole* poles,LOS* los)
+{
+	histo_t *thready;
+	size_t iy;
+	size_t nw_tot = window.shape[0]*poles[0].n_ells*window.shape[1]*poles[1].n_ells;
+	Integration integration_mu;
+	init_integration(&integration_mu,&precision_mu);
+
+	for (iy=0;iy<nw_tot;iy++) window.y[iy] = 0.;
+
+#pragma omp parallel default(none) shared(angular,radials,window,nw_tot,poles,los,integration_mu) private(thready)
+	{
+		size_t ix,iy;
+		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
+		size_t n_ells2=poles[0].n_ells,n_ells3=poles[1].n_ells;
+		size_t n_s2=window.shape[0],n_s3=window.shape[1];
+		const histo_t sign[2] = {-1.,1.};
+
+#pragma omp for nowait schedule(dynamic)
+		for (ix=0;ix<radials[0].size;ix++) {
+			histo_t x = radials[0].x[ix];
+			histo_t px = radials[0].y[ix];
+			size_t imus;
+			for (imus=0;imus<integration_mu.n;imus++) {
+				histo_t mus = integration_mu.x[imus];
+				histo_t w = integration_mu.w[imus];
+				size_t is;
+				for (is=0;is<n_s2;is++) {
+					histo_t s = window.x[is];
+					histo_t xs = my_sqrt(x*x + 2.*x*s*mus + s*s);
+					histo_t costheta = (xs*xs + x*x - s*s)/(2.*x*xs);
+					histo_t costheta2 = costheta*costheta;
+					histo_t weight = w*find_selection_1d(angular,costheta)*px*find_selection_1d(radials[1],xs);
+					if (weight == 0.) continue;
+					histo_t dist_los,dist_los2,legs[MAX_ELLS],legs2[MAX_ELLS];
+					legendre(get_distance_mu(x,xs,s,los[0].type,&dist_los),legs,poles[0].type);
+					legendre(get_distance_mu(xs,x,s,los[0].type,&dist_los2),legs2,poles[0].type);
+					dist_los = get_distance_losn(dist_los,los[0].n);
+					dist_los2 = get_distance_losn(dist_los2,los[0].n);
+					size_t ill2;
+					for (ill2=0;ill2<n_ells2;ill2++) legs[ill2] = weight*(legs[ill2]/dist_los + legs2[ill2]/dist_los2);
+					size_t id;
+					for (id=0;id<n_s3;id++) {
+						if (id == is) continue;
+						histo_t d = window.x[id+n_s2];
+						histo_t xod = x/d;
+						histo_t b = 2.*(1.-costheta2)*xod;
+						histo_t c = (1.-costheta2)*xod*xod-costheta2;
+						histo_t delta = b*b - 4.*c;
+						if (delta < 0.) continue;
+						delta = my_sqrt(delta);
+						size_t isign;
+						for (isign=0;isign<2;isign++) {
+							histo_t mud = (-b + sign[isign]*delta)/2.;
+							if ((mud < -1.)||(mud > 1.)) continue;
+							histo_t xd = my_sqrt(x*x + 2.*x*d*mud + d*d);
+							histo_t costhetad = (xd*xd + x*x - d*d)/(2.*x*xd);
+							if (costhetad*costheta < 0) continue;
+							histo_t weight = jacobian_costheta(x,xd,d)*find_selection_1d(radials[2],xd);
+							//histo_t weight = my_abs(xd*xd*xd/(d*d*(d+x*mud)))*find_selection_1d(radials[2],xd);
+							if (weight == 0.) continue;
+							histo_t dist_los,legd[MAX_ELLS];
+							legendre(get_distance_mu(x,xd,d,los[1].type,&dist_los),legd,poles[1].type);
+							weight *= 1./get_distance_losn(dist_los,los[1].n);
+							size_t ill3;
+							for (ill2=0;ill2<n_ells2;ill2++) {
+								for (ill3=0;ill3<n_ells3;ill3++) {
+									thready[ill3+n_ells3*(ill2+n_ells2*(id+n_s3*is))] += weight*legs[ill2]*legd[ill3];
+								}
+							}
+						}
+					}
+				}
+			}
+		} // end omp for
+	
+#pragma omp critical
+		{
+			for (iy=0;iy<nw_tot;iy++) window.y[iy] += thready[iy];
+			free(thready);
+		}
+	} //end omp parallel
+	free_integration(&integration_mu);
+}
+
+/*
 void cross_3pcf_multi_angular(Selection angular,Selection* radials,Selection window,Pole* poles,LOS* los)
 {
 	histo_t *thready;
@@ -736,7 +1194,187 @@ void cross_3pcf_multi_angular(Selection angular,Selection* radials,Selection win
 		}
 	} //end omp parallel
 }
+*/
 
+void cross_4pcf_multi_angular_angular(Selection angular,Selection* radials,Selection window,Pole* poles,LOS* los)
+{
+	histo_t *thready;
+	size_t iy;
+	const size_t n_sec = 2;
+	size_t nw_sec[2] = {window.shape[0]*poles[0].n_ells,window.shape[1]*poles[1].n_ells};
+	size_t nw_tot = nw_sec[0]*nw_sec[1];
+	histo_t* ysec[n_sec];
+	
+	Integration integration_costheta;
+	find_selection_range_1d(angular,&(precision_costheta.min),&(precision_costheta.max),"costheta");
+	init_integration(&integration_costheta,&precision_costheta);
+
+	for (iy=0;iy<nw_tot;iy++) window.y[iy] = 0.;
+
+#pragma omp parallel default(none) shared(angular,radials,window,nw_tot,nw_sec,poles,los,integration_costheta) private(thready,ysec)
+	{
+		size_t icos,iy,isec;
+		const histo_t sign[2] = {-1.,1.};
+		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
+		for (isec=0;isec<n_sec;isec++) ysec[isec] = (histo_t*) malloc(nw_sec[isec]*sizeof(histo_t));
+
+#pragma omp for nowait schedule(dynamic)
+		for (icos=0;icos<integration_costheta.n;icos++) {
+			histo_t costheta = integration_costheta.x[icos];
+			histo_t pang = integration_costheta.w[icos]*find_selection_1d(angular,costheta);
+			if (pang == 0.) continue;
+			for (isec=0;isec<n_sec;isec++) {
+				histo_t *y2 = ysec[isec];
+				for (iy=0;iy<nw_sec[isec];iy++) y2[iy] = 0.;
+				Selection* radialsec = &(radials[isec*2]);
+				MULTI_TYPE multi_type2 = poles[isec].type;
+				size_t n_ells2 = poles[isec].n_ells;
+				LOS los2 = los[isec];
+				size_t n_s2 = window.shape[isec];
+				histo_t dist_los,leg[MAX_ELLS];
+				size_t start_win = (isec==1) ? window.shape[0] : 0;
+				size_t ix;
+				for (ix=0;ix<radialsec[0].size;ix++) {
+					histo_t x = radialsec[0].x[ix];
+					histo_t px = radialsec[0].y[ix];
+					int is;
+					for (is=n_s2-1;is>=0;is--) {
+						histo_t s = window.x[is+start_win];
+						histo_t delta = x*x*(costheta*costheta-1.) + s*s;
+						if (delta < 0.) break;
+						delta = my_sqrt(delta);
+						size_t isign;
+						for (isign=0;isign<2;isign++) {
+							histo_t xs = x*costheta + sign[isign]*delta;
+							histo_t weight = px*find_selection_1d(radialsec[1],xs);
+							if (weight == 0.) continue;
+							legendre(get_distance_mu(x,xs,s,los2.type,&dist_los),leg,multi_type2);
+							weight *= jacobian_costheta(x,xs,s)/get_distance_losn(dist_los,los2.n);
+							size_t ill;
+							for (ill=0;ill<n_ells2;ill++) y2[ill+is*n_ells2] += weight*leg[ill];
+						}
+					}
+				}
+			}
+			histo_t *y2=ysec[0],*y3=ysec[1];
+			size_t n_ells2=poles[0].n_ells,n_ells3=poles[1].n_ells;
+			size_t n_s2=window.shape[0],n_s3=window.shape[1];
+			size_t is2;
+			for (is2=0;is2<n_s2;is2++) {
+				if (y2[is2*n_ells2] != 0.) {
+					size_t is3;
+					for (is3=0;is3<n_s3;is3++) {
+						if (y3[is3*n_ells3] != 0.) {
+							size_t ill2,ill3;
+							for (ill2=0;ill2<n_ells2;ill2++) {
+								for (ill3=0;ill3<n_ells3;ill3++) {
+									thready[ill3+n_ells3*(ill2+n_ells2*(is3+n_s3*is2))] += pang*y2[ill2+is2*n_ells2]*y3[ill3+is3*n_ells3];
+								}
+							}
+						}
+					}
+				}
+			}
+		} // end omp for
+	
+#pragma omp critical
+		{
+			for (iy=0;iy<nw_tot;iy++) window.y[iy] += thready[iy];
+			for (isec=0;isec<n_sec;isec++) free(ysec[isec]);
+			free(thready);
+		}
+	} //end omp parallel
+}
+/*
+void cross_4pcf_multi_angular_angular(Selection angular,Selection* radials,Selection window,Pole* poles,LOS* los)
+{
+	histo_t *thready;
+	size_t iy;
+	const size_t n_sec = 2;
+	size_t nw_sec[2] = {window.shape[0]*poles[0].n_ells,window.shape[1]*poles[1].n_ells};
+	size_t nw_tot = nw_sec[0]*nw_sec[1];
+	histo_t* ysec[n_sec];
+
+	for (iy=0;iy<nw_tot;iy++) window.y[iy] = 0.;
+
+#pragma omp parallel default(none) shared(angular,radials,window,nw_tot,nw_sec,poles,los) private(thready,ysec)
+	{
+		size_t icos,iy,isec;
+		const histo_t sign[2] = {-1.,1.};
+		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
+		for (isec=0;isec<n_sec;isec++) ysec[isec] = (histo_t*) malloc(nw_sec[isec]*sizeof(histo_t));
+
+#pragma omp for nowait schedule(dynamic)
+		for (icos=0;icos<angular.size;icos++) {
+			histo_t costheta = angular.x[icos];
+			histo_t pang = angular.y[icos];
+			if (pang == 0.) continue;
+			size_t ix;
+			for (isec=0;isec<n_sec;isec++) {
+				histo_t *y2 = ysec[isec];
+				for (iy=0;iy<nw_sec[isec];iy++) y2[iy] = 0.;
+				Selection* radialsec = &(radials[isec*2]);
+				MULTI_TYPE multi_type2 = poles[isec].type;
+				size_t n_ells2 = poles[isec].n_ells;
+				LOS los2 = los[isec];
+				size_t n_s2 = window.shape[isec];
+				histo_t dist_los,leg[MAX_ELLS];
+				size_t start_win = (isec==1) ? window.shape[0] : 0;
+				for (ix=0;ix<radialsec[0].size;ix++) {
+					histo_t x = radialsec[0].x[ix];
+					histo_t px = radialsec[0].y[ix];
+					int is;
+					for (is=n_s2-1;is>=0;is--) {
+						histo_t s = window.x[is+start_win];
+						histo_t delta = x*x*(costheta*costheta-1.) + s*s;
+						if (delta < 0.) break;
+						delta = my_sqrt(delta);
+						size_t isign;
+						for (isign=0;isign<2;isign++) {
+							histo_t xs = x*costheta + sign[isign]*delta;
+							histo_t weight = px*find_selection_1d(radialsec[1],xs);
+							if (weight == 0.) continue;
+							legendre(get_distance_mu(x,xs,s,los2.type,&dist_los),leg,multi_type2);
+							weight *= jacobian_costheta(x,xs,s)/get_distance_losn(dist_los,los2.n);
+							size_t ill;
+							for (ill=0;ill<n_ells2;ill++) y2[ill+is*n_ells2] += weight*leg[ill];
+						}
+					}
+				}
+			}
+			histo_t *y2 = ysec[0];
+			histo_t *y3 = ysec[1];
+			size_t n_ells2 = poles[0].n_ells;
+			size_t n_ells3 = poles[1].n_ells;
+			size_t n_s2 = window.shape[0];
+			size_t n_s3 = window.shape[1];
+			size_t is2;
+			for (is2=0;is2<n_s2;is2++) {
+				if (y2[is2*n_ells2] != 0.) {
+					size_t is3;
+					for (is3=0;is3<n_s3;is3++) {
+						if (y3[is3*n_ells3] != 0.) {
+							size_t ill2,ill3;
+							for (ill2=0;ill2<n_ells2;ill2++) {
+								for (ill3=0;ill3<n_ells3;ill3++) {
+									thready[ill3+n_ells3*(ill2+n_ells2*(is3+n_s3*is2))] += pang*y2[ill2+is2*n_ells2]*y3[ill3+is3*n_ells3];
+								}
+							}
+						}
+					}
+				}
+			}
+		} // end omp for
+	
+#pragma omp critical
+		{
+			for (iy=0;iy<nw_tot;iy++) window.y[iy] += thready[iy];
+			for (isec=0;isec<n_sec;isec++) free(ysec[isec]);
+			free(thready);
+		}
+	} //end omp parallel
+}
+*/
 
 void cross_4pcf_multi_radial_global(Selection angular,Selection* radials,Selection window,Pole* poles,LOS* los)
 {
@@ -804,98 +1442,6 @@ void cross_4pcf_multi_radial_global(Selection angular,Selection* radials,Selecti
 							for (ill2=0;ill2<n_ells2;ill2++) {
 								for (ill3=0;ill3<n_ells3;ill3++) {
 									thready[ill3+n_ells3*(ill2+n_ells2*(is3+n_s3*is2))] += weight1*y2[ill2+is2*n_ells2]*y3[ill3+is3*n_ells3];
-								}
-							}
-						}
-					}
-				}
-			}
-		} // end omp for
-	
-#pragma omp critical
-		{
-			for (iy=0;iy<nw_tot;iy++) window.y[iy] += thready[iy];
-			for (isec=0;isec<n_sec;isec++) free(ysec[isec]);
-			free(thready);
-		}
-	} //end omp parallel
-}
-
-void cross_4pcf_multi_angular_angular(Selection angular,Selection* radials,Selection window,Pole* poles,LOS* los)
-{
-	histo_t *thready;
-	size_t iy;
-	const size_t n_sec = 2;
-	size_t nw_sec[2] = {window.shape[0]*poles[0].n_ells,window.shape[1]*poles[1].n_ells};
-	size_t nw_tot = nw_sec[0]*nw_sec[1];
-	histo_t* ysec[n_sec];
-
-	for (iy=0;iy<nw_tot;iy++) window.y[iy] = 0.;
-
-#pragma omp parallel default(none) shared(angular,radials,window,nw_tot,nw_sec,poles,los) private(thready,ysec)
-	{
-		size_t icos,iy,isec;
-		const histo_t sign[2] = {-1.,1.};
-		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
-		for (isec=0;isec<n_sec;isec++) ysec[isec] = (histo_t*) malloc(nw_sec[isec]*sizeof(histo_t));
-
-#pragma omp for nowait schedule(dynamic)
-		for (icos=0;icos<angular.size;icos++) {
-			histo_t costheta = angular.x[icos];
-			histo_t pang = angular.y[icos];
-			if (pang == 0.) continue;
-			size_t ix;
-			for (isec=0;isec<n_sec;isec++) {
-				histo_t *y2 = ysec[isec];
-				for (iy=0;iy<nw_sec[isec];iy++) y2[iy] = 0.;
-				Selection* radialsec = &(radials[isec*2]);
-				MULTI_TYPE multi_type2 = poles[isec].type;
-				size_t n_ells2 = poles[isec].n_ells;
-				LOS los2 = los[isec];
-				size_t n_s2 = window.shape[isec];
-				histo_t dist_los,leg[MAX_ELLS];
-				size_t start_win = (isec==1) ? window.shape[0] : 0;
-				for (ix=0;ix<radialsec[0].size;ix++) {
-					histo_t x = radialsec[0].x[ix];
-					histo_t px = radialsec[0].y[ix];
-					int is;
-					for (is=n_s2-1;is>=0;is--) {
-						histo_t s = window.x[is+start_win];
-						histo_t delta = x*x*(costheta*costheta-1.) + s*s;
-						if (delta < 0.) break;
-						delta = my_sqrt(delta);
-						size_t isign;
-						for (isign=0;isign<2;isign++) {
-							histo_t xs = x*costheta + sign[isign]*delta;
-							histo_t weight = px*find_selection_1d(radialsec[1],xs);
-							if (weight == 0.) continue;
-							legendre(get_distance_mu(x,xs,s,los2.type,&dist_los),leg,multi_type2);
-							//histo_t mu = get_distance_mu(x,xs,s,LOS_MIDPOINT,&dist_los);
-							//printf("%.4f %.4f %.4f %.4f %.4f\n",costheta,s,x,xs,get_distance_mu(x,xs,s,los2.type,&dist_los));
-							//if ((mu<-1.) || (mu>1.)) printf("%.9e\n",mu);
-							weight /= get_distance_losn(dist_los,los2.n);
-							size_t ill;
-							for (ill=0;ill<n_ells2;ill++) y2[ill+is*n_ells2] += weight*leg[ill];
-						}
-					}
-				}
-			}
-			histo_t *y2 = ysec[0];
-			histo_t *y3 = ysec[1];
-			size_t n_ells2 = poles[0].n_ells;
-			size_t n_ells3 = poles[1].n_ells;
-			size_t n_s2 = window.shape[0];
-			size_t n_s3 = window.shape[1];
-			size_t is2;
-			for (is2=0;is2<n_s2;is2++) {
-				if (y2[is2*n_ells2] != 0.) {
-					size_t is3;
-					for (is3=0;is3<n_s3;is3++) {
-						if (y3[is3*n_ells3] != 0.) {
-							size_t ill2,ill3;
-							for (ill2=0;ill2<n_ells2;ill2++) {
-								for (ill3=0;ill3<n_ells3;ill3++) {
-									thready[ill3+n_ells3*(ill2+n_ells2*(is3+n_s3*is2))] += pang*y2[ill2+is2*n_ells2]*y3[ill3+is3*n_ells3];
 								}
 							}
 						}

@@ -11,6 +11,10 @@ histo_t find_selection_1d(Selection selection,histo_t x);
 
 histo_t find_selection_2d(Selection selection,histo_t x,histo_t y);
 
+void find_selection_range_1d(Selection selection,histo_t *min,histo_t *max,char *type);
+
+void find_selection_range_2d(Selection selection,histo_t *min,histo_t *max,char *type);
+
 _Bool set_precision_integration(Precision *precision,size_t n,histo_t min,histo_t max,char *integration,const Precision *precision_default);
 
 void init_integration(Integration *integration,Precision *precision);
@@ -39,7 +43,7 @@ void cross_4pcf_multi_radial_radial(Selection angular,Selection* radials,Selecti
 
 void cross_2pcf_multi_angular(Selection* radials,Selection window,Pole pole,LOS los);
 
-void cross_3pcf_multi_angular(Selection angular,Selection* radials,Selection window,Pole* poles,LOS* los);
+void cross_3pcf_multi_angular_double_los(Selection angular,Selection* radials,Selection window,Pole* poles,LOS* los);
 
 void cross_4pcf_multi_angular_angular(Selection angular,Selection* radials,Selection window,Pole* poles,LOS* los);
 

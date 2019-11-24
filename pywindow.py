@@ -72,7 +72,7 @@ class PyWindow(object):
 
 	def set_precision(self,calculation='mu',n=0,min=1.,max=-1.,integration='test'):
 
-		assert typewin in ['mu','x','costheta']
+		assert calculation in ['mu','x','costheta']
 		self.window.set_precision.argtypes = (ctypes.c_char_p,ctypes.c_size_t,self.C_TYPE,self.C_TYPE,ctypes.c_char_p)
 		self.window.set_precision(calculation,n,min,max,integration)
 
@@ -96,7 +96,7 @@ class PyWindow(object):
 
 		self.ells = self.set_pole(1,ells=ells)
 		self.los = self.set_los(1,los=los,n=losn)
-		self.set_angular_selection(costheta,angular,interpol=interpol_angular)
+		if typewin != 'angular': self.set_angular_selection(costheta,angular,interpol=interpol_angular)
 		self.set_n_radial_selection(distance,radial,interpols=interpol_radial,n=2)
 		self.set_window(s)
 		assert typewin in ['global','radial','angular']
