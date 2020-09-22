@@ -1,7 +1,7 @@
 ####################################################
 ###          User definable stuff
 
-EXEC = window
+EXEC = anacorr
 
 DEFINEOPTIONS =
 #DEFINEOPTIONS += -D_FLOAT32
@@ -30,9 +30,9 @@ INCLUDECOM = -I./lib -I$(GSL_INC)
 #.c FILES
 CCOM = $(CUTE_LIB)/common.c
 CCORR = $(CUTE_LIB)/correlator.c
-CWINDOW = $(CUTE_LIB)/window.c
+CANACORR = $(CUTE_LIB)/anacorr.c
 
-SRC = $(CCOM) $(CCORR) $(CBOX) $(CWINDOW)
+SRC = $(CCOM) $(CCORR) $(CBOX) $(CANACORR)
 
 #.o FILES
 

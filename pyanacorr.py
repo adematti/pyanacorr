@@ -16,19 +16,19 @@ def tolist(el,n=None,fill=None,value=None):
 	else: el += [value]*miss
 	return el
 
-class PyWindow(object):
+class PyAnacorr(object):
 
 	C_TYPE = ctypes.c_double
-	PATH_WINDOW = os.path.join(os.path.dirname(os.path.realpath(__file__)),'window.so')
+	PATH_ANACORR = os.path.join(os.path.dirname(os.path.realpath(__file__)),'anacorr.so')
 
 	def __init__(self):
 
-		self.window = ctypes.CDLL(self.PATH_WINDOW,mode=ctypes.RTLD_LOCAL)
+		self.anacorr = ctypes.CDLL(self.PATH_ANACORR,mode=ctypes.RTLD_LOCAL)
 		self.clear()
 
 	def set_verbosity(self,mode='info'):
-		self.window.set_verbosity.argtypes = (ctypes.c_char_p,)
-		self.window.set_verbosity(mode)
+		self.anacorr.set_verbosity.argtypes = (ctypes.c_char_p,)
+		self.anacorr.set_verbosity(mode.encode('utf-8'))
 		self._verbose = mode
 	
 	def set_pole(self,num=1,ells=[0,2,4,6,8,10,12]):
@@ -44,16 +44,16 @@ class PyWindow(object):
 			ells = scipy.arange(nells)
 			multitype = 'all'
 		
-		self.window.set_pole.argtypes = (ctypes.c_size_t,ctypes.c_char_p,ctypes.c_size_t)
-		self.window.set_pole(num,multitype,nells)
+		self.anacorr.set_pole.argtypes = (ctypes.c_size_t,ctypes.c_char_p,ctypes.c_size_t)
+		self.anacorr.set_pole(num,multitype.encode('utf-8'),nells)
 		self._ells[num] = ells.tolist()
 
 		return list(self._ells[num])
 	
 	def set_los(self,num=1,los='midpoint',n=0):
 		
-		self.window.set_los.argtypes = (ctypes.c_size_t,ctypes.c_char_p,ctypes.c_size_t)
-		self.window.set_los(num,los,n)
+		self.anacorr.set_los.argtypes = (ctypes.c_size_t,ctypes.c_char_p,ctypes.c_size_t)
+		self.anacorr.set_los(num,los.encode('utf-8'),n)
 
 		self._los[num] = (los,n)
 
@@ -65,7 +65,7 @@ class PyWindow(object):
 		return ells
 	
 	def set_n_los(self,los,losn=0,n=1):
-		if isinstance(los,(str,unicode)): los = [los]*n
+		if isinstance(los,str): los = [los]*n
 		if scipy.isscalar(losn): losn = [losn]*n
 		los = [self.set_los(ilos+1,los=los[ilos],n=losn[ilos]) for ilos in range(n)]
 		return los
@@ -73,22 +73,22 @@ class PyWindow(object):
 	def set_precision(self,calculation='mu',n=0,min=1.,max=-1.,integration='test'):
 
 		assert calculation in ['mu','x','costheta']
-		self.window.set_precision.argtypes = (ctypes.c_char_p,ctypes.c_size_t,self.C_TYPE,self.C_TYPE,ctypes.c_char_p)
-		self.window.set_precision(calculation,n,min,max,integration)
+		self.anacorr.set_precision.argtypes = (ctypes.c_char_p,ctypes.c_size_t,self.C_TYPE,self.C_TYPE,ctypes.c_char_p)
+		self.anacorr.set_precision(calculation.encode('utf-8'),n,min,max,integration.encode('utf-8'))
 
 	def find_angular_selection(self,x,y=None):
 
 		x = scipy.asarray(x)
 		if len(self._costheta) == 2:
 			y = scipy.asarray(y)
-			self.window.find_angular_selection_2d.argtypes = (self.C_TYPE,self.C_TYPE)
-			self.window.find_angular_selection_2d.restype = self.C_TYPE
-			toret = [[self.window.find_angular_selection_2d(x_,y_) for y_ in y] for x_ in x]
+			self.anacorr.find_angular_selection_2d.argtypes = (self.C_TYPE,self.C_TYPE)
+			self.anacorr.find_angular_selection_2d.restype = self.C_TYPE
+			toret = [[self.anacorr.find_angular_selection_2d(x_,y_) for y_ in y] for x_ in x]
 		else:
 			interpol = 1 if interpol=='lin' else 0
-			self.window.find_angular_selection_1d.argtypes = (self.C_TYPE)
-			self.window.find_angular_selection_1d.restype = self.C_TYPE
-			toret = [self.window.find_angular_selection_1d(x_) for x_ in x]
+			self.anacorr.find_angular_selection_1d.argtypes = (self.C_TYPE)
+			self.anacorr.find_angular_selection_1d.restype = self.C_TYPE
+			toret = [self.anacorr.find_angular_selection_1d(x_) for x_ in x]
 
 		return scipy.array(toret)
 
@@ -101,8 +101,8 @@ class PyWindow(object):
 		self.set_window(s)
 		assert typewin in ['global','radial','angular']
 		
-		self.window.run_2pcf_multi.argtypes = (ctypes.c_char_p,ctypes.c_size_t,)
-		self.window.run_2pcf_multi(typewin,nthreads)
+		self.anacorr.run_2pcf_multi.argtypes = (ctypes.c_char_p,ctypes.c_size_t,)
+		self.anacorr.run_2pcf_multi(typewin.encode('utf-8'),nthreads)
 	
 	def set_3pcf_multi(self,s,costheta,angular,distance,radial,ells=[0,2,4,6,8,10,12],los='midpoint',losn=0,typewin='global',interpol_angular='lin',interpol_radial='lin',nthreads=8):
 
@@ -113,8 +113,8 @@ class PyWindow(object):
 		self.set_window(s)
 		#assert typewin in ['global','radial','angular']
 		
-		self.window.run_3pcf_multi.argtypes = (ctypes.c_char_p,ctypes.c_size_t,)
-		self.window.run_3pcf_multi(typewin,nthreads)
+		self.anacorr.run_3pcf_multi.argtypes = (ctypes.c_char_p,ctypes.c_size_t,)
+		self.anacorr.run_3pcf_multi(typewin.encode('utf-8'),nthreads)
 
 	def set_4pcf_multi(self,s,costheta,angular,distance,radial,ells=[0,2,4,6,8,10,12],los='midpoint',losn=0,typewin='global-global',interpol_angular='lin',interpol_radial='lin',nthreads=8):
 
@@ -125,8 +125,8 @@ class PyWindow(object):
 		self.set_window(s)
 		assert typewin in ['global-global','radial-radial','radial-global','angular-angular','angular-global','angular-radial']
 		
-		self.window.run_4pcf_multi.argtypes = (ctypes.c_char_p,ctypes.c_size_t,)
-		self.window.run_4pcf_multi(typewin,nthreads)
+		self.anacorr.run_4pcf_multi.argtypes = (ctypes.c_char_p,ctypes.c_size_t,)
+		self.anacorr.run_4pcf_multi(typewin.encode('utf-8'),nthreads)
 		
 	def set_n_radial_selection(self,distances,radials,interpols='lin',n=1):
 
@@ -147,8 +147,8 @@ class PyWindow(object):
 		typedistance = ctypeslib.ndpointer(dtype=self.C_TYPE,shape=size)
 		typeradial = ctypeslib.ndpointer(dtype=self.C_TYPE,shape=size)
 		
-		self.window.set_radial_selection.argtypes = (ctypes.c_size_t,typedistance,typeradial,ctypes.c_size_t,ctypes.c_char_p)
-		self.window.set_radial_selection(num,self._distance[num],self._radial[num],size,interpol)
+		self.anacorr.set_radial_selection.argtypes = (ctypes.c_size_t,typedistance,typeradial,ctypes.c_size_t,ctypes.c_char_p)
+		self.anacorr.set_radial_selection(num,self._distance[num],self._radial[num],size,interpol.encode('utf-8'))
 
 	def set_angular_selection(self,costheta,angular,interpol='lin',copy=False):
 		
@@ -164,8 +164,8 @@ class PyWindow(object):
 		typecostheta = ctypeslib.ndpointer(dtype=self.C_TYPE,shape=scipy.sum(shape))
 		typeangular = ctypeslib.ndpointer(dtype=self.C_TYPE,shape=scipy.prod(shape))
 		
-		self.window.set_angular_selection.argtypes = (typecostheta,typeangular,ctypeslib.ndpointer(dtype=ctypes.c_size_t,shape=len(shape)),ctypes.c_size_t,ctypes.c_char_p)
-		self.window.set_angular_selection(self.__costheta,self._angular,self._shape_angular,len(shapeangular),interpol)
+		self.anacorr.set_angular_selection.argtypes = (typecostheta,typeangular,ctypeslib.ndpointer(dtype=ctypes.c_size_t,shape=len(shape)),ctypes.c_size_t,ctypes.c_char_p)
+		self.anacorr.set_angular_selection(self.__costheta,self._angular,self._shape_angular,len(shapeangular),interpol.encode('utf-8'))
 		
 		self._angular.shape = shapeangular
 		
@@ -184,8 +184,8 @@ class PyWindow(object):
 		typex = ctypeslib.ndpointer(dtype=self.C_TYPE,shape=scipy.sum(shapex))
 		typey = ctypeslib.ndpointer(dtype=self.C_TYPE,shape=scipy.prod(shapey))
 		
-		self.window.set_window.argtypes = (typex,typey,ctypeslib.ndpointer(dtype=ctypes.c_size_t,shape=len(shapex)),ctypes.c_size_t)
-		self.window.set_window(self._x,self.y,self._shape_window,len(shapex))
+		self.anacorr.set_window.argtypes = (typex,typey,ctypeslib.ndpointer(dtype=ctypes.c_size_t,shape=len(shapex)),ctypes.c_size_t)
+		self.anacorr.set_window(self._x,self.y,self._shape_window,len(shapex))
 
 		self.y.shape = shapey
 	
@@ -195,17 +195,17 @@ class PyWindow(object):
 		fy = new(fy,dtype=self.C_TYPE,copy=True)
 		f = new(f,dtype=self.C_TYPE,copy=True)
 		typep = ctypeslib.ndpointer(dtype=self.C_TYPE,shape=2)
-		self.window.interpol_bilin.argtypes = (self.C_TYPE,self.C_TYPE,typep,typep,ctypeslib.ndpointer(dtype=self.C_TYPE,shape=4))
-		self.window.interpol_bilin.restype = self.C_TYPE
+		self.anacorr.interpol_bilin.argtypes = (self.C_TYPE,self.C_TYPE,typep,typep,ctypeslib.ndpointer(dtype=self.C_TYPE,shape=4))
+		self.anacorr.interpol_bilin.restype = self.C_TYPE
 		
-		return self.window.interpol_bilin(x,y,fx,fy,f)
+		return self.anacorr.interpol_bilin(x,y,fx,fy,f)
 
 	def clear(self):
 		self._distance = {}
 		self._radial = {}
 		self._ells = {}
 		self._los = {}
-		self.window.clear_radial_selections()
-		self.window.clear_poles()
+		self.anacorr.clear_radial_selections()
+		self.anacorr.clear_poles()
 		self.set_verbosity()
 		

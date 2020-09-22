@@ -102,7 +102,7 @@ void cross_2pcf_multi(Selection angular,Selection* radials,Selection window,Pole
 		size_t n_ells = pole.n_ells;
 		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (ix=0;ix<radials[0].size;ix++) {
 			histo_t x = radials[0].x[ix];
 			histo_t px = radials[0].y[ix];
@@ -162,7 +162,7 @@ void cross_2pcf_multi(Selection angular,Selection* radials,Selection window,Pole
 		size_t n_s = window.size;
 		//histo_t maxj=-1.,minj=1/EPS;
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (icos=0;icos<integration_costheta.n;icos++) {
 			histo_t costheta = integration_costheta.x[icos];
 			histo_t pang = integration_costheta.w[icos]*find_selection_1d(angular,costheta);
@@ -225,7 +225,7 @@ void cross_2pcf_multi(Selection angular,Selection* radials,Selection window,Pole
 		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
 		size_t n_s = window.size;
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (icos=0;icos<angular.size;icos++) {
 			histo_t costheta = angular.x[icos];
 			histo_t pang = angular.y[icos];
@@ -288,7 +288,7 @@ void cross_3pcf_multi_double_los(Selection angular,Selection* radials,Selection 
 		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
 		for (isec=0;isec<n_sec;isec++) ysec[isec] = (histo_t*) malloc(nw_sec[isec]*sizeof(histo_t));
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (ix=0;ix<radials[0].size;ix++) {
 			histo_t x = radials[0].x[ix];
 			for (isec=0;isec<n_sec;isec++) {
@@ -393,7 +393,7 @@ void cross_3pcf_multi_double_los(Selection angular,Selection* radials,Selection 
 		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
 		for (isec=0;isec<n_sec;isec++) ysec[isec] = (histo_t*) malloc(nw_sec[isec]*sizeof(histo_t));
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (ix=0;ix<radials[0].size;ix++) {
 			histo_t x = radials[0].x[ix];
 			for (isec=0;isec<n_sec;isec++) {
@@ -491,7 +491,7 @@ void cross_3pcf_multi_double_los(Selection angular,Selection* radials,Selection 
 		size_t n_ells2=poles[0].n_ells,n_ells3=poles[1].n_ells;
 		size_t n_s2=window.shape[0],n_s3=window.shape[1];
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (ix=0;ix<radials[0].size;ix++) {
 			histo_t x = radials[0].x[ix];
 			histo_t px = radials[0].y[ix];
@@ -610,7 +610,7 @@ void cross_2pcf_multi_radial(Selection angular,Selection* radials,Selection wind
 		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
 		size_t n_s = window.size;
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (ix=0;ix<radials[0].size;ix++) {
 			histo_t x = radials[0].x[ix];
 			histo_t px = radials[0].y[ix];
@@ -655,7 +655,7 @@ void cross_3pcf_multi_radial_double_los(Selection angular,Selection* radials,Sel
 		size_t n_ells2=poles[0].n_ells,n_ells3=poles[1].n_ells;
 		size_t n_s2=window.shape[0],n_s3=window.shape[1];
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (ix=0;ix<radials[0].size;ix++) {
 			histo_t x = radials[0].x[ix];
 			histo_t px = radials[0].y[ix];
@@ -726,7 +726,7 @@ void cross_4pcf_multi_radial_radial(Selection angular,Selection* radials,Selecti
 		size_t n_ells2=poles[0].n_ells,n_ells3=poles[1].n_ells;
 		size_t n_s2=window.shape[0],n_s3=window.shape[1];
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (ix=0;ix<radials[0].size;ix++) {
 			histo_t x = radials[0].x[ix];
 			histo_t px = radials[0].y[ix];
@@ -800,7 +800,7 @@ void cross_3pcf_multi_radial(Selection angular,Selection* radials,Selection wind
 			costhetasec[isec] = (histo_t*) malloc(nw_sec[isec]*sizeof(histo_t));
 		}
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (ix=0;ix<radials[0].size;ix++) {
 			histo_t x = radials[0].x[ix];
 			size_t ixs;
@@ -892,7 +892,7 @@ void cross_2pcf_multi_angular(Selection* radials,Selection window,Pole pole,LOS 
 		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
 		size_t n_s = window.size;
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (ix=0;ix<radials[0].size;ix++) {
 			histo_t x = radials[0].x[ix];
 			histo_t px = radials[0].y[ix];
@@ -944,7 +944,7 @@ void cross_3pcf_multi_angular_double_los(Selection angular,Selection* radials,Se
 		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
 		for (isec=0;isec<n_sec;isec++) ysec[isec] = (histo_t*) malloc(nw_sec[isec]*sizeof(histo_t));
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (ix=0;ix<radials[0].size;ix++) {
 			histo_t x = radials[0].x[ix];
 			histo_t px = radials[0].y[ix];
@@ -1034,7 +1034,7 @@ void cross_3pcf_multi_angular_double_los(Selection angular,Selection* radials,Se
 		size_t n_s2=window.shape[0],n_s3=window.shape[1];
 		const histo_t sign[2] = {-1.,1.};
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (ix=0;ix<radials[0].size;ix++) {
 			histo_t x = radials[0].x[ix];
 			histo_t px = radials[0].y[ix];
@@ -1120,7 +1120,7 @@ void cross_3pcf_multi_angular(Selection angular,Selection* radials,Selection win
 		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
 		for (isec=0;isec<n_sec;isec++) ysec[isec] = (histo_t*) malloc(nw_sec[isec]*sizeof(histo_t));
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (icos=0;icos<angular.size;icos++) {
 			histo_t costheta = angular.x[icos];
 			histo_t pang = angular.y[icos];
@@ -1218,7 +1218,7 @@ void cross_4pcf_multi_angular_angular(Selection angular,Selection* radials,Selec
 		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
 		for (isec=0;isec<n_sec;isec++) ysec[isec] = (histo_t*) malloc(nw_sec[isec]*sizeof(histo_t));
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (icos=0;icos<integration_costheta.n;icos++) {
 			histo_t costheta = integration_costheta.x[icos];
 			histo_t pang = integration_costheta.w[icos]*find_selection_1d(angular,costheta);
@@ -1304,7 +1304,7 @@ void cross_4pcf_multi_angular_angular(Selection angular,Selection* radials,Selec
 		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
 		for (isec=0;isec<n_sec;isec++) ysec[isec] = (histo_t*) malloc(nw_sec[isec]*sizeof(histo_t));
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (icos=0;icos<angular.size;icos++) {
 			histo_t costheta = angular.x[icos];
 			histo_t pang = angular.y[icos];
@@ -1393,7 +1393,7 @@ void cross_4pcf_multi_radial_global(Selection angular,Selection* radials,Selecti
 		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
 		for (isec=0;isec<n_sec;isec++) ysec[isec] = (histo_t*) malloc(nw_sec[isec]*sizeof(histo_t));
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (ix=0;ix<radials[0].size;ix++) {
 			histo_t x = radials[0].x[ix];
 			for (isec=0;isec<n_sec;isec++) {
@@ -1485,7 +1485,7 @@ void cross_4pcf_multi_angular_global(Selection angular,Selection* radials,Select
 			size_t start_win = (isec==1) ? window.shape[0] : 0;
 			size_t start_ang = (isec==1) ? angular.shape[0] : 0;
 			thready = (histo_t *) calloc(nw_sec[isec],sizeof(histo_t));
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 			for (icos=0;icos<angular.shape[isec];icos++) {
 				histo_t costheta = angular.x[icos+start_ang];
 				size_t ix;
@@ -1532,7 +1532,7 @@ void cross_4pcf_multi_angular_global(Selection angular,Selection* radials,Select
 		size_t n_cos3 = angular.shape[1];
 		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
 		size_t icos2;
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (icos2=0;icos2<n_cos2;icos2++) {
 			size_t icos3;
 			for (icos3=0;icos3<n_cos3;icos3++) {
@@ -1587,7 +1587,7 @@ void cross_4pcf_multi_angular_radial(Selection angular,Selection* radials,Select
 		thready = (histo_t *) calloc(nw_tot,sizeof(histo_t));
 		for (isec=0;isec<n_sec;isec++) ysec[isec] = (histo_t*) malloc(nw_sec[isec]*sizeof(histo_t));
 
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(static)
 		for (ixs=0;ixs<radials[1].size;ixs++) {
 			histo_t xs = radials[1].x[ixs];
 			for (isec=0;isec<n_sec;isec++) {

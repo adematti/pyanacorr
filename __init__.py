@@ -1,5 +1,5 @@
 __version__ = '0.1'
 __author__ = 'Arnaud de Mattia'
-__all__ = ['pywindow','PyWindow']
+__all__ = ['pyanacorr','PyAnacorr']
 
-from pywindow import PyWindow
+from .pyanacorr import PyAnacorr
