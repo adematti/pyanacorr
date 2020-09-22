@@ -11,7 +11,7 @@ All tests are in tests/.
 Installation
 ------------
 
-To compile the C code:
+To compile the C code:\
 $ make clean\
 $ make
 
