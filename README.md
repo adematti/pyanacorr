@@ -12,7 +12,7 @@ Installation
 ------------
 
 To compile the C code:
-$ make clean
+$ make clean\
 $ make
 
 Requirements
